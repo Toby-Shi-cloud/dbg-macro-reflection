@@ -11,6 +11,10 @@ This projects provides a [single header file](dbg.h) with a `dbg(…)`
 macro that can be used in all circumstances where you would typically write
 `printf("…", …)` or `std::cout << …`. But it comes with a few extras.
 
+## Extension README
+
+Add [magic_enum](https://github.com/Neargye/magic_enum) and [reflect](https://github.com/qlibs/reflect) to do static reflection in cpp20.
+
 ## Examples
 
 ``` c++
