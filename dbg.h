@@ -520,34 +520,7 @@ inline void pretty_print(std::ostream& stream, const T& value, std::true_type) {
   stream << value;
 }
 
-#if DBG_MACRO_CXX_STANDARD >= 20
-template <typename T>
-inline void pretty_print(std::ostream& stream, T const& value, std::false_type) {
-  static_assert(detail::has_ostream_operator<const T&>::value || std::is_aggregate_v<T>,
-                "Type does not support the << ostream operator and is not reflectable");
-
-  if constexpr (std::is_aggregate_v<T>) {
-    constexpr auto ansi = &DebugOutput::ansi_;
-    constexpr auto ANSI_RESET = DebugOutput::ANSI_RESET;
-    constexpr auto ANSI_VALUE = DebugOutput::ANSI_VALUE;
-    constexpr auto ANSI_TYPE = DebugOutput::ANSI_TYPE;
-    constexpr auto ANSI_EXPRESSION = DebugOutput::ANSI_EXPRESSION;
-
-    stream << "{";
-    reflect::for_each([&](auto I) {
-      if constexpr (I != 0) stream << ", ";
-      stream << ansi(ANSI_EXPRESSION) << reflect::member_name<I>(value) << ansi(ANSI_RESET) << " = ";
-      stream << ansi(ANSI_VALUE);
-      bool print_type = pretty_print(stream, reflect::get<I>(value));
-      stream << ansi(ANSI_RESET);
-      if (print_type) {
-        stream << " (" << ansi(ANSI_TYPE) << reflect::type_name(reflect::get<I>(value)) << ansi(ANSI_RESET) << ")";
-      }
-    }, value);
-    stream << "}";
-  }
-}
-#else
+#if DBG_MACRO_CXX_STANDARD < 20
 template <typename T>
 inline void pretty_print(std::ostream&, const T&, std::false_type) {
   static_assert(detail::has_ostream_operator<const T&>::value,
@@ -980,6 +953,7 @@ class DebugOutput {
 
   static constexpr std::size_t MAX_PATH_LENGTH = 20;
 
+#if DBG_MACRO_CXX_STANDARD >= 20
   static const char* ansi_(const char* code) {
     if (isColorizedOutputEnabled()) {
       return code;
@@ -990,6 +964,7 @@ class DebugOutput {
 
   template <typename T>
   friend void pretty_print(std::ostream&, const T&, std::false_type);
+#endif
 
   static constexpr const char* const ANSI_EMPTY = "";
   static constexpr const char* const ANSI_DEBUG = "\x1b[02m";
@@ -999,6 +974,35 @@ class DebugOutput {
   static constexpr const char* const ANSI_TYPE = "\x1b[32m";
   static constexpr const char* const ANSI_RESET = "\x1b[0m";
 };
+
+#if DBG_MACRO_CXX_STANDARD >= 20
+template <typename T>
+inline void pretty_print(std::ostream& stream, T const& value, std::false_type) {
+  static_assert(detail::has_ostream_operator<const T&>::value || std::is_aggregate_v<T>,
+                "Type does not support the << ostream operator and is not reflectable");
+
+  if constexpr (std::is_aggregate_v<T>) {
+    constexpr auto ansi = &DebugOutput::ansi_;
+    constexpr auto ANSI_RESET = DebugOutput::ANSI_RESET;
+    constexpr auto ANSI_VALUE = DebugOutput::ANSI_VALUE;
+    constexpr auto ANSI_TYPE = DebugOutput::ANSI_TYPE;
+    constexpr auto ANSI_EXPRESSION = DebugOutput::ANSI_EXPRESSION;
+
+    stream << "{";
+    reflect::for_each([&](auto I) {
+      if constexpr (I != 0) stream << ", ";
+      stream << ansi(ANSI_EXPRESSION) << reflect::member_name<I>(value) << ansi(ANSI_RESET) << " = ";
+      stream << ansi(ANSI_VALUE);
+      bool print_type = pretty_print(stream, reflect::get<I>(value));
+      stream << ansi(ANSI_RESET);
+      if (print_type) {
+        stream << " (" << ansi(ANSI_TYPE) << reflect::type_name(reflect::get<I>(value)) << ansi(ANSI_RESET) << ")";
+      }
+    }, value);
+    stream << "}";
+  }
+}
+#endif
 
 // Identity function to suppress "-Wunused-value" warnings in DBG_MACRO_DISABLE
 // mode
