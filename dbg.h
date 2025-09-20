@@ -58,7 +58,9 @@ License (MIT):
 #include <unistd.h>
 #endif
 
-#if __cplusplus >= 201703L
+#if __cplusplus >= 202002L
+#define DBG_MACRO_CXX_STANDARD 20 
+#elif __cplusplus >= 201703L
 #define DBG_MACRO_CXX_STANDARD 17
 #elif __cplusplus >= 201402L
 #define DBG_MACRO_CXX_STANDARD 14
@@ -66,7 +68,12 @@ License (MIT):
 #define DBG_MACRO_CXX_STANDARD 11
 #endif
 
+#if DBG_MACRO_CXX_STANDARD >= 20
+#include "3rd/reflect.hpp"
+#endif
+
 #if DBG_MACRO_CXX_STANDARD >= 17
+#include "3rd/magic_enum.hpp"
 #include <optional>
 #include <variant>
 #endif
@@ -76,6 +83,8 @@ namespace dbg {
 inline bool isColorizedOutputEnabled() {
 #if defined(DBG_MACRO_FORCE_COLOR)
   return true;
+#elif defined(DBG_MACRO_FORCE_NO_COLOR)
+  return false;
 #elif defined(DBG_MACRO_UNIX)
   return isatty(fileno(stderr));
 #else
@@ -511,11 +520,40 @@ inline void pretty_print(std::ostream& stream, const T& value, std::true_type) {
   stream << value;
 }
 
+#if DBG_MACRO_CXX_STANDARD >= 20
+template <typename T>
+inline void pretty_print(std::ostream& stream, T const& value, std::false_type) {
+  static_assert(detail::has_ostream_operator<const T&>::value || std::is_aggregate_v<T>,
+                "Type does not support the << ostream operator and is not reflectable");
+
+  if constexpr (std::is_aggregate_v<T>) {
+    constexpr auto ansi = &DebugOutput::ansi_;
+    constexpr auto ANSI_RESET = DebugOutput::ANSI_RESET;
+    constexpr auto ANSI_VALUE = DebugOutput::ANSI_VALUE;
+    constexpr auto ANSI_TYPE = DebugOutput::ANSI_TYPE;
+    constexpr auto ANSI_EXPRESSION = DebugOutput::ANSI_EXPRESSION;
+
+    stream << "{";
+    reflect::for_each([&](auto I) {
+      if constexpr (I != 0) stream << ", ";
+      stream << ansi(ANSI_EXPRESSION) << reflect::member_name<I>(value) << ansi(ANSI_RESET) << " = ";
+      stream << ansi(ANSI_VALUE);
+      bool print_type = pretty_print(stream, reflect::get<I>(value));
+      stream << ansi(ANSI_RESET);
+      if (print_type) {
+        stream << " (" << ansi(ANSI_TYPE) << reflect::type_name(reflect::get<I>(value)) << ansi(ANSI_RESET) << ")";
+      }
+    }, value);
+    stream << "}";
+  }
+}
+#else
 template <typename T>
 inline void pretty_print(std::ostream&, const T&, std::false_type) {
   static_assert(detail::has_ostream_operator<const T&>::value,
                 "Type does not support the << ostream operator");
 }
+#endif
 
 template <typename T>
 inline typename std::enable_if<
@@ -713,9 +751,21 @@ inline bool pretty_print(std::ostream& stream, const print_type<T>&) {
 template <typename Enum>
 inline typename std::enable_if<std::is_enum<Enum>::value, bool>::type
 pretty_print(std::ostream& stream, Enum const& value) {
+#if DBG_MACRO_CXX_STANDARD >= 17
+  if constexpr (magic_enum::detail::is_reflected_v<Enum, magic_enum::detail::subtype_v<Enum>>) {
+    auto name = magic_enum::enum_name(value);
+    if (name.empty()) {
+      stream << static_cast<std::underlying_type_t<Enum>>(value);
+    } else {
+      stream << magic_enum::enum_name(value);
+    }
+  } else {
+    stream << static_cast<std::underlying_type_t<Enum>>(value);
+  }
+#else
   using UnderlyingType = typename std::underlying_type<Enum>::type;
   stream << static_cast<UnderlyingType>(value);
-
+#endif
   return true;
 }
 
@@ -929,6 +979,17 @@ class DebugOutput {
   std::string m_location;
 
   static constexpr std::size_t MAX_PATH_LENGTH = 20;
+
+  static const char* ansi_(const char* code) {
+    if (isColorizedOutputEnabled()) {
+      return code;
+    } else {
+      return ANSI_EMPTY;
+    }
+  }
+
+  template <typename T>
+  friend void pretty_print(std::ostream&, const T&, std::false_type);
 
   static constexpr const char* const ANSI_EMPTY = "";
   static constexpr const char* const ANSI_DEBUG = "\x1b[02m";
