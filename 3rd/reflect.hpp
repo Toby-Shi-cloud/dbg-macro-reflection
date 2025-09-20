@@ -1180,7 +1180,7 @@ static_assert(([] {
 
     struct non_standard_layout {
      private:
-        int _1{};
+        [[maybe_unused]] int _1{};
      public:
         int _2{};
     };
