@@ -262,6 +262,14 @@ struct user_defined_container {
   std::size_t size() const { return N; }
 };
 
+#if DBG_MACRO_CXX_STANDARD >= 20
+struct user_defined_trivially_type {
+  int a;
+  double b;
+  std::vector<char> c;
+};
+#endif
+
 TEST_CASE("pretty_print user defined types") {
   SECTION("classes") {
     user_defined_type x{42};
@@ -270,18 +278,33 @@ TEST_CASE("pretty_print user defined types") {
 
   SECTION("enums") {
     user_defined_enum x = UDE_VALUE42;
+#if DBG_MACRO_CXX_STANDARD >= 17
+    CHECK(pretty_print(x) == "UDE_VALUE42");
+#else
     CHECK(pretty_print(x) == "42");
+#endif
   }
 
   SECTION("enum classes") {
     user_defined_enum_class x = user_defined_enum_class::VALUE42;
+#if DBG_MACRO_CXX_STANDARD >= 17
+    CHECK(pretty_print(x) == "VALUE42");
+#else
     CHECK(pretty_print(x) == "42");
+#endif
   }
 
   SECTION("containers") {
     user_defined_container<int, 3> xs{{1, 2, 3}};
     CHECK(pretty_print(xs) == "{1, 2, 3}");
   }
+
+#if DBG_MACRO_CXX_STANDARD >= 20
+  SECTION("trivially printable types") {
+    user_defined_trivially_type x{42, 3.14, {'a', 'b', 'c'}};
+    CHECK(pretty_print(x) == "{a = 42 (int), b = 3.14 (double), c = {'a', 'b', 'c'} (vector)}");
+  }
+#endif
 }
 
 TEST_CASE("type_name") {
